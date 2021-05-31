@@ -1,0 +1,4 @@
+python-binance
+TA-lib (pra análise técnica dos candles)
+numpy (used for calculations)
+websocket_client
