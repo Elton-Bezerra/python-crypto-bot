@@ -1,8 +1,31 @@
-import websocket, json, pprint
+import websocket, json, pprint, talib, numpy, config
+from binance.client import Client
+from binance.enums import *
 
-SOCKET = "wss://stream.binance.com:9443/ws/ethusdt@kline_1m"
+SOCKET = "wss://stream.binance.com:9443/ws/winbrl@kline_1m"
+
+RSI_PERIOD = 14
+RSI_OVERBOUGHT = 70
+RSI_OVERSOLD = 30
+
+TRADE_SYMBOL = 'WINBRL'
+TRADE_QUANTITY = 10
 
 closes = []
+in_position = False
+
+client = Client(config.API_KEY, config.API_SECRET)
+
+def order(side, quantity, symbol, order_type=ORDER_TYPE_MARKET) :
+    try:
+        print("sending order")
+        order = client.create_order(symbol=symbol, quantity=quantity, side=side, order_type=order_type)
+        print(order)
+        return True
+    except Exception as e:
+        return False
+
+
 
 def on_open(ws):
     print('opened connection')
@@ -15,7 +38,7 @@ def on_message(ws, message):
     global closes
     print('received message')
     json_message = json.loads(message)
-    pprint.pprint(json_message)
+    # pprint.pprint(json_message)
 
     candle = json_message['k']
     is_candle_closed = candle['x']
@@ -26,6 +49,35 @@ def on_message(ws, message):
         closes.append(float(close))
         print('closes')
         print(closes)
+
+        if len(closes) > RSI_PERIOD: 
+            np_closes = numpy.array(closes)
+            rsi = talib.RSI(np_closes, RSI_PERIOD);
+            print("all rsis calculated so far")
+            print(rsi)
+            last_rsi = rsi[-1]
+            print("the current rsi is {}".format(last_rsi))
+
+            if last_rsi > RSI_OVERBOUGHT: 
+                if in_position:
+                    print("Sell! Sell! Sell!")
+                    #Put binance order sell logic here
+                    order_succeded = order(SIDE_SELL, TRADE_QUANTITY, TRADE_SYMBOL)
+                    if order_succeded:
+                        in_position = False
+
+                else: 
+                    print("It's overbought, but we don't own any. Nothing to do.") 
+
+            if last_rsi < RSI_OVERSOLD:
+                if in_position: 
+                    print("It's oversold, but you already own it, nothing to do.") 
+                else:
+                    print("Buy! Buy! Buy!")
+                    #Put binance buy order logic here
+                    order_succeded = order(SIDE_BUY, TRADE_QUANTITY, TRADE_SYMBOL)
+                    if order_succeded:
+                        in_position = True
 
 
 ws = websocket.WebSocketApp(SOCKET, on_open=on_open, on_close=on_close, on_message=on_message)
